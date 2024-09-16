@@ -17,11 +17,35 @@ const { notFound, errorHandler } = require("./middleware/errorMiddleware");
 dotenv.config();
 connectDB();
 app.use(express.json());
-app.use("*", cors());
+
+//Fixed Cross-domain miss-configuration of the backend
+const corsOptions = {
+	origin: ["http://localhost:3000"],
+	credentials: true,
+	methods: "GET,HEAD,PUT,POST,DELETE",
+	allowedHeaders: "Content-Type,Authorization",
+};
+
+app.use(cors(corsOptions));
 
 app.get("/", (req, res) => {
 	res.send("API is Running");
 });
+
+// Fix the CSP header vulnerability -- backend
+app.use(helmet());
+
+app.use(
+	helmet.contentSecurityPolicy({
+		directives: {
+			defaultSrc: ["'self'"],
+			scriptSrc: ["'self'", "trusted-scripts.com"],
+			styleSrc: ["'self'", "trusted-styles.com"],
+		},
+		reportOnly: true,
+	})
+);
+
 
 app.use("/user/admin", adminRoutes);
 app.use("/user/customer", customerRoutes);
