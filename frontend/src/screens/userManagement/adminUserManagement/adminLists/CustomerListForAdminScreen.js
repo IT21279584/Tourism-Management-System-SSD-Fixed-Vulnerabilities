@@ -38,6 +38,9 @@ const CustomerListForAdminScreen = () => {
 
 	useEffect(() => {
 		dispatch(customersList());
+		if (!adminInfo) {
+			history.push("/access-denied", { replace: true });
+		}
 	}, [dispatch, history, adminInfo, customerDeleteById, successDelete, successUpdate]);
 
 	const deleteHandler = (id) => {
