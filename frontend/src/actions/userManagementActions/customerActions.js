@@ -32,12 +32,14 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import { API_ENDPOINT } from "../../config";
 
+let csrfToken;
 // customer loggin action
 export const customerLogin = (email, password) => async (dispatch) => {
 	try {
 		dispatch({ type: CUSTOMER_LOGIN_REQUEST });
 
 		const config = {
+			withCredentials: true,
 			headers: {
 				"Content-type": "application/json",
 			},
@@ -60,6 +62,7 @@ export const customerLogin = (email, password) => async (dispatch) => {
 		});
 
 		localStorage.setItem("customerInfo", JSON.stringify(data));
+		csrfToken = data.csrfToken;
 	} catch (error) {
 		dispatch({
 			type: CUSTOMER_LOGIN_FAIL,
@@ -67,6 +70,17 @@ export const customerLogin = (email, password) => async (dispatch) => {
 		});
 	}
 };
+
+//creating authheader for customer
+export function authHeader() {
+	let customer = JSON.parse(localStorage.getItem("customerInfo"));
+
+	if (customer && customer.token) {
+		return { Authorization: `Bearer ${customer.token}` };
+	} else {
+		return {};
+	}
+}
 
 //customer log out action
 export const customerLogout = () => async (dispatch) => {
@@ -78,49 +92,60 @@ export const customerLogout = () => async (dispatch) => {
 export const customerRegister =
 	(firstName, lastName, telephone, address, gender, country, email, password, pic) => async (dispatch) => {
 		try {
-			dispatch({
-				type: CUSTOMER_REGISTER_REQUEST,
-			});
+			dispatch({ type: CUSTOMER_REGISTER_REQUEST });
 
-			const { data } = await axios.post(`${API_ENDPOINT}/user/customer/register`, {
-				firstName,
-				lastName,
-				telephone,
-				address,
-				gender,
-				country,
-				email,
-				password,
-				pic,
-			});
+			const config = {
+				withCredentials: true,
+				headers: {
+					"Content-type": "application/json",
+				},
+			};
 
-			dispatch({
-				type: CUSTOMER_REGISTER_SUCCESS,
-				payload: data,
-			});
+			//call the backend route
+			const { data } = await axios.post(
+				`${API_ENDPOINT}/user/customer/register`,
+				{
+					firstName,
+					lastName,
+					telephone,
+					address,
+					gender,
+					country,
+					email,
+					password,
+					pic,
+				},
+				config
+			);
+
+			dispatch({ type: CUSTOMER_REGISTER_SUCCESS, payload: data });
 			Swal.fire({
 				title: "Success !!!",
 				text: "Customer Registration Successful.",
 				icon: "success",
 				timer: 2000,
+				button: false,
 			});
 		} catch (error) {
-			const message = error.response && error.response.data.message ? error.response.data.message : error.message;
 			dispatch({
 				type: CUSTOMER_REGISTER_FAIL,
-				payload: message,
+				payload: error.response && error.response.data.message ? error.response.data.message : error.message,
 			});
 		}
 	};
-
 // customer to view their profile action
 export const customerViewProfile = (customer) => async (dispatch, getState) => {
 	try {
 		dispatch({ type: CUSTOMER_VIEW_REQUEST });
 
+		const {
+			customer_Login: { customerInfo },
+		} = getState();
+
 		const config = {
 			headers: {
 				"Content-Type": "application/json",
+				Authorization: `Bearer ${customerInfo.token}`,
 			},
 		};
 
@@ -145,14 +170,24 @@ export const customerUpdateProfile = (customer) => async (dispatch, getState) =>
 	try {
 		dispatch({ type: CUSTOMER_UPDATE_REQUEST });
 
+		const {
+			customer_Login: { customerInfo },
+		} = getState();
+
 		const config = {
+			withCredentials: true,
 			headers: {
 				"Content-Type": "application/json",
+				Authorization: `Bearer ${customerInfo.token}`,
 			},
 		};
 
+		csrfToken = await fetchCsrfToken();
+
+		const requestBody = JSON.stringify({ csrfToken, ...customer });
+
 		//call the backend route
-		const { data } = await axios.put(`${API_ENDPOINT}/user/customer/edit`, customer, config);
+		const { data } = await axios.put(`${API_ENDPOINT}/user/customer/edit`, requestBody, config);
 
 		dispatch({ type: CUSTOMER_UPDATE_SUCCESS, payload: data });
 		Swal.fire({
@@ -179,9 +214,14 @@ export const customerDeleteProfile = () => async (dispatch, getState) => {
 	try {
 		dispatch({ type: CUSTOMER_DELETE_REQUEST });
 
+		const {
+			customer_Login: { customerInfo },
+		} = getState();
 		const config = {
+			withCredentials: true,
 			headers: {
 				"Content-Type": "application/json",
+				Authorization: `Bearer ${customerInfo.token}`,
 			},
 		};
 
@@ -207,8 +247,18 @@ export const customersList = () => async (dispatch, getState) => {
 			type: CUSTOMER_LIST_REQUEST,
 		});
 
+		const {
+			admin_Login: { adminInfo },
+		} = getState();
+
+		const config = {
+			headers: {
+				Authorization: `Bearer ${adminInfo.token}`,
+			},
+		};
+
 		//call the backend route
-		const { data } = await axios.get(`${API_ENDPOINT}/user/admin/customers`);
+		const { data } = await axios.get(`${API_ENDPOINT}/user/admin/customers`, config);
 
 		dispatch({
 			type: CUSTOMER_LIST_SUCCESS,
@@ -232,19 +282,33 @@ export const customerViewProfileById =
 				type: CUSTOMER_VIEW_BY_ID_REQUEST,
 			});
 
+			const {
+				admin_Login: { adminInfo },
+			} = getState();
+
+			const config = {
+				headers: {
+					Authorization: `Bearer ${adminInfo.token}`,
+				},
+			};
+
 			//call the backend route
-			const { data } = await axios.get(`${API_ENDPOINT}/user/admin/customer/profile/view/${id}`, {
-				id,
-				firstName,
-				lastName,
-				telephone,
-				address,
-				gender,
-				country,
-				email,
-				password,
-				pic,
-			});
+			const { data } = await axios.get(
+				`${API_ENDPOINT}/user/admin/customer/profile/view/${id}`,
+				{
+					id,
+					firstName,
+					lastName,
+					telephone,
+					address,
+					gender,
+					country,
+					email,
+					password,
+					pic,
+				},
+				config
+			);
 
 			dispatch({
 				type: CUSTOMER_VIEW_BY_ID_SUCCESS,
@@ -268,19 +332,35 @@ export const customerUpdateProfileById =
 				type: CUSTOMER_UPDATE_BY_ID_REQUEST,
 			});
 
+			const {
+				admin_Login: { adminInfo },
+			} = getState();
+
+			const config = {
+				withCredentials: true,
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${adminInfo.token}`,
+				},
+			};
+
 			//call the backend route
-			const { data } = await axios.put(`${API_ENDPOINT}/user/admin/customer/profile/edit/${id}`, {
-				firstName,
-				lastName,
-				telephone,
-				address,
-				gender,
-				country,
-				email,
-				password,
-				pic,
-				message,
-			});
+			const { data } = await axios.put(
+				`${API_ENDPOINT}/user/admin/customer/profile/edit/${id}`,
+				{
+					firstName,
+					lastName,
+					telephone,
+					address,
+					gender,
+					country,
+					email,
+					password,
+					pic,
+					message,
+				},
+				config
+			);
 
 			dispatch({
 				type: CUSTOMER_UPDATE_BY_ID_SUCCESS,
@@ -309,8 +389,19 @@ export const customerDeleteProfileById = (id) => async (dispatch, getState) => {
 			type: CUSTOMER_DELETE_BY_ID_REQUEST,
 		});
 
+		const {
+			admin_Login: { adminInfo },
+		} = getState();
+
+		const config = {
+			withCredentials: true,
+			headers: {
+				Authorization: `Bearer ${adminInfo.token}`,
+			},
+		};
+
 		//call the backend route
-		const { data } = await axios.delete(`${API_ENDPOINT}/user/admin/customer/profile/view/${id}`);
+		const { data } = await axios.delete(`${API_ENDPOINT}/user/admin/customer/profile/view/${id}`, config);
 
 		dispatch({
 			type: CUSTOMER_DELETE_BY_ID_SUCCESS,
@@ -324,3 +415,19 @@ export const customerDeleteProfileById = (id) => async (dispatch, getState) => {
 		});
 	}
 };
+
+async function fetchCsrfToken() {
+	try {
+		const config = {
+			withCredentials: true,
+			headers: {
+				"Content-Type": "application/json",
+			},
+		};
+		const response = await axios.get(`${API_ENDPOINT}/user/customer/get-csrf`, config);
+		return response.data.newCsrfToken;
+	} catch (error) {
+		console.error("Failed to fetch CSRF token:", error);
+		return null;
+	}
+}

@@ -1,9 +1,19 @@
 const asyncHandler = require("express-async-handler");
 const Customer = require("../models/customerModel");
+const generateToken = require("../utils/generateToken");
+const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
+
+const CUSTOMER_SESSIONS = new Map();
 
 // register  customer profile
 const registerCustomer = asyncHandler(async (req, res) => {
 	const { firstName, lastName, telephone, address, gender, country, email, password, pic } = req.body;
+	const user = CUSTOMER_SESSIONS.get(req.cookies.sessionId);
+	if (user == null) {
+		res.sendStatus(401);
+		return;
+	}
 
 	const customerExists = await Customer.findOne({ email });
 	if (customerExists) {
@@ -23,10 +33,25 @@ const registerCustomer = asyncHandler(async (req, res) => {
 		pic,
 	});
 
-	const addedCustomer =await customer.save();
+	const salt = await bcrypt.genSalt(10);
+
+	customer.password = await bcrypt.hash(password, salt);
+
+	await customer.save();
 
 	if (customer) {
-		res.status(201).json(addedCustomer);
+		res.status(201).json({
+			_id: customer._id,
+			firstName: customer.firstName,
+			lastName: customer.lastName,
+			telephone: customer.telephone,
+			address: customer.address,
+			gender: customer.gender,
+			country: customer.country,
+			email: customer.email,
+			pic: customer.pic,
+			token: generateToken(customer._id),
+		});
 	} else {
 		res.status(400);
 		throw new Error("Customer Registration Failed !");
@@ -43,10 +68,28 @@ const authCustomer = asyncHandler(async (req, res) => {
 		res.status(400);
 		throw new Error("Invalid Email or Password");
 	}
-	if (!(password === customer.password)) {
+
+	const isMatch = await bcrypt.compare(password, customer.password);
+
+	if (!isMatch) {
 		res.status(400);
 		throw new Error("Invalid Email or Password");
 	} else {
+		const sessionId = crypto.randomUUID();
+		const csrfToken = crypto.randomUUID();
+
+		const id = customer._id;
+		CUSTOMER_SESSIONS.set(sessionId, { id, csrfToken });
+		const expirationDate = new Date();
+		expirationDate.setDate(expirationDate.getDate() + 2);
+
+		//Set the cookie
+		res.cookie("sessionId", sessionId, {
+			httpOnly: false,
+			withCredentials: true,
+			expires: expirationDate,
+		});
+
 		res.status(201).json({
 			_id: customer._id,
 			firstName: customer.firstName,
@@ -58,6 +101,8 @@ const authCustomer = asyncHandler(async (req, res) => {
 			email: customer.email,
 			pic: customer.pic,
 			regDate: customer.regDate,
+			token: generateToken(customer._id),
+			csrfToken,
 		});
 	}
 });
@@ -95,6 +140,11 @@ const getCustomerProfileById = asyncHandler(async (req, res) => {
 //update customer profile by customer
 const updateCustomerProfile = asyncHandler(async (req, res) => {
 	const customer = await Customer.findById(req.customer._id);
+	const user = CUSTOMER_SESSIONS.get(req.cookies.sessionId);
+	if (user == null || user.csrfToken !== req.body.csrfToken) {
+		res.sendStatus(401);
+		return;
+	}
 
 	if (customer) {
 		customer.firstName = req.body.firstName || customer.firstName;
@@ -105,8 +155,10 @@ const updateCustomerProfile = asyncHandler(async (req, res) => {
 		customer.country = req.body.country || customer.country;
 		customer.email = req.body.email || customer.email;
 		customer.pic = req.body.pic || customer.pic;
-		customer.password = req.body.password || customer.password;
-		
+		if (req.body.password) {
+			const salt = await bcrypt.genSalt(10);
+			customer.password = await bcrypt.hash(req.body.password, salt);
+		}
 		const updatedCustomer = await customer.save();
 
 		res.json({
@@ -120,6 +172,7 @@ const updateCustomerProfile = asyncHandler(async (req, res) => {
 			email: updatedCustomer.email,
 			pic: updatedCustomer.pic,
 			regDate: updatedCustomer.regDate,
+			token: generateToken(updatedCustomer._id),
 		});
 	} else {
 		res.status(404);
@@ -140,8 +193,10 @@ const updateCustomerProfileById = asyncHandler(async (req, res) => {
 		customer.country = req.body.country || customer.country;
 		customer.email = req.body.email || customer.email;
 		customer.pic = req.body.pic || customer.pic;
-		customer.password = req.body.password || customer.password;
-		
+		if (req.body.password) {
+			const salt = await bcrypt.genSalt(10);
+			customer.password = await bcrypt.hash(req.body.password, salt);
+		}
 		const updatedCustomer = await customer.save();
 
 		res.json({
@@ -155,6 +210,7 @@ const updateCustomerProfileById = asyncHandler(async (req, res) => {
 			email: updatedCustomer.email,
 			pic: updatedCustomer.pic,
 			regDate: updatedCustomer.regDate,
+			token: generateToken(updatedCustomer._id),
 		});
 	} else {
 		res.status(404);
@@ -165,6 +221,12 @@ const updateCustomerProfileById = asyncHandler(async (req, res) => {
 // delete customer profile by  customer
 const deleteCustomerProfile = asyncHandler(async (req, res) => {
 	const customer = await Customer.findById(req.customer._id);
+
+	const user = CUSTOMER_.get(req.cookies.sessionId);
+	if (user == null) {
+		res.sendStatus(401);
+		return;
+	}
 
 	if (customer) {
 		await customer.deleteOne();
@@ -188,7 +250,25 @@ const deleteCustomerProfileById = asyncHandler(async (req, res) => {
 	}
 });
 
+// create csrf token
+const getCSRF = asyncHandler(async (req, res) => {
+	const sessionId = req.cookies.sessionId;
+	// Check if the session exists in CUSTOMER_SESSIONS
+	if (req.cookies.sessionId) {
+		const newCsrfToken = crypto.randomUUID();
+
+		// Assign the new CSRF token to the session object
+		const session = CUSTOMER_SESSIONS.get(req.cookies.sessionId);
+		session.csrfToken = newCsrfToken;
+
+		res.json({ newCsrfToken });
+	} else {
+		res.status(400).json({ message: "Session not found" });
+	}
+});
+
 module.exports = {
+	CUSTOMER_SESSIONS,
 	registerCustomer,
 	authCustomer,
 	getCustomers,
@@ -198,4 +278,5 @@ module.exports = {
 	updateCustomerProfileById,
 	deleteCustomerProfile,
 	deleteCustomerProfileById,
+	getCSRF,
 };
