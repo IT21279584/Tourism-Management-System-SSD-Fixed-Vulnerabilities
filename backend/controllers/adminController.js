@@ -20,10 +20,33 @@ const registerAdmin = asyncHandler(async (req, res) => {
 		pic,
 	});
 
-	const addedAdmin =await admin.save();
+// 	const addedAdmin =await admin.save();
+
+// 	if (admin) {
+// 		res.status(201).json(addedAdmin);
+// 	} else {
+// 		res.status(400);
+// 		throw new Error("Admin Registration Failed !");
+// 	}
+// });
+
+const salt = await bcrypt.genSalt(10);
+
+	admin.password = await bcrypt.hash(password, salt);
+
+	await admin.save();
 
 	if (admin) {
-		res.status(201).json(addedAdmin);
+		res.status(201).json({
+			_id: admin._id,
+			name: admin.name,
+			isAdmin: admin.isAdmin,
+			telephone: admin.telephone,
+			address: admin.address,
+			email: admin.email,
+			pic: admin.pic,
+			token: generateToken(admin._id),
+		});
 	} else {
 		res.status(400);
 		throw new Error("Admin Registration Failed !");
