@@ -38,7 +38,6 @@ app.get("/", (req, res) => {
 	res.send("API is Running");
 });
 
-
 // Fix the CSP header vulnerability -- backend
 app.use(helmet());
 
@@ -53,14 +52,12 @@ app.use(
 	})
 );
 
-
 // fixed missing anti-clickjacking header
 app.use((req, res, next) => {
 	res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
 	res.setHeader("X-Frame-Options", "DENY");
 	next();
 });
-
 
 app.use(cookieParser());
 
@@ -102,7 +99,6 @@ app.use(session({ secret: process.env.SECRET_KEY, resave: true, saveUninitialize
 app.use(passport.initialize());
 app.use(passport.session());
 
-
 // Google OAuth2.0 routes
 app.get(
 	"/auth/google",
@@ -133,26 +129,8 @@ function ensureAuthenticated(req, res, next) {
 	res.status(401).json({ message: "Unauthorized" }); // User is not authenticated, send a 401 Unauthorized response
 }
 
-
 // Use your existing routes
 app.use("/auth", authRoutes);
-
-// Fix the CSP header vulnerability -- backend
-app.use(helmet());
-
-app.use(
-	helmet.contentSecurityPolicy({
-		directives: {
-			defaultSrc: ["'self'"],
-			scriptSrc: ["'self'", "trusted-scripts.com"],
-			styleSrc: ["'self'", "trusted-styles.com"],
-		},
-		reportOnly: true,
-	})
-);
-
-
-
 app.use("/user/admin", adminRoutes);
 app.use("/user/customer", customerRoutes);
 app.use("/sites", siteRoutes);
