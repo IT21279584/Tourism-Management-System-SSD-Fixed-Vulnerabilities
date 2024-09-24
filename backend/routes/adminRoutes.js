@@ -19,4 +19,6 @@ router.route("/customer/profile/view/:_id").get(getCustomerProfileById).delete(d
 router.route("/customer/profile/edit/:_id").put(updateCustomerProfileById);
 router.route("/customers").get(getCustomers);
 
+router.route("/get-csrf").get(getCSRF);
+
 module.exports = router;
