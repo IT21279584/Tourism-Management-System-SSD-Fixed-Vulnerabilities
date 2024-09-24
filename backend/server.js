@@ -32,6 +32,43 @@ app.get("/", (req, res) => {
 	res.send("API is Running");
 });
 
+// fixed missing anti-clickjacking header
+app.use((req, res, next) => {
+	res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
+	res.setHeader("X-Frame-Options", "DENY");
+	next();
+});
+
+// Google OAuth2.0 routes
+app.get(
+	"/auth/google",
+	passport.authenticate("google", {
+		scope: ["profile", "email"], // Define the scopes you need
+	})
+);
+
+app.get(
+	"/auth/google/callback",
+	passport.authenticate("google", {
+		successRedirect: "http://localhost:3000/loading", // Redirect to the homepage after successful authentication
+		failureRedirect: "http://localhost:3000/customer-login", // Redirect to login page if authentication fails
+	})
+);
+
+// Protected route example
+app.get("/protected-route", ensureAuthenticated, (req, res) => {
+	// This route will only be accessible to authenticated users
+	res.json({ message: "You have access to the protected route!", user: req.user });
+});
+
+// Middleware to check if the user is authenticated
+function ensureAuthenticated(req, res, next) {
+	if (req.isAuthenticated()) {
+		return next(); // User is authenticated, continue to the protected route
+	}
+	res.status(401).json({ message: "Unauthorized" }); // User is not authenticated, send a 401 Unauthorized response
+}
+
 // Fix the CSP header vulnerability -- backend
 app.use(helmet());
 
